@@ -57,7 +57,6 @@ public final class Habit: Codable {
     
     private lazy var dateFormatter: DateFormatter = {
         let formatter = DateFormatter()
-        formatter.locale = Locale(identifier: "ru_RU")
         formatter.timeStyle = .short
         return formatter
     }()
@@ -99,10 +98,16 @@ public final class HabitsStore {
     /// Синглтон для изменения состояния привычек из разных модулей.
     public static let shared: HabitsStore = .init()
     
+    public static let didUpdateNotificationName: NSNotification.Name = {
+        return NSNotification.Name("HabitsStoreUpdated")
+    }()
+    
     /// Список привычек, добавленных пользователем. Добавленные привычки сохраняются в UserDefaults и доступны после перезагрузки приложения.
     public var habits: [Habit] = [] {
         didSet {
             save()
+            let notification = Notification(name: HabitsStore.didUpdateNotificationName)
+            NotificationCenter.default.post(notification)
         }
     }
     
@@ -114,6 +119,7 @@ public final class HabitsStore {
         return Date.dates(from: startDate, to: .init())
     }
     
+    /// Прогресс выполнения добавленных привычек. Привычка считается выполненной, если пользователь добавлял время больше 5 раз.
     /// Возвращает значение от 0 до 1.
     public var todayProgress: Float {
         guard habits.isEmpty == false else {
@@ -176,7 +182,13 @@ public final class HabitsStore {
     /// - Returns: Возвращает true, если привычка была затрекана в переданную дату.
     public func habit(_ habit: Habit, isTrackedIn date: Date) -> Bool {
         habit.trackDates.contains { trackDate in
-            calendar.isDate(date, equalTo: trackDate, toGranularity: .day)
+            guard let trackDateDay = calendar.dateComponents([.day], from: trackDate).day else {
+                return false
+            }
+            guard let dateDay = calendar.dateComponents([.day], from: date).day else {
+                return false
+            }
+            return trackDateDay - dateDay == 0
         }
     }
     
@@ -184,8 +196,7 @@ public final class HabitsStore {
     
     private init() {
         if userDefaults.value(forKey: "start_date") == nil {
-            let startDate = calendar.date(from: calendar.dateComponents([.year, .month, .day], from: Date())) ?? Date()
-            userDefaults.setValue(startDate, forKey: "start_date")
+            userDefaults.setValue(Date(), forKey: "start_date")
         }
         guard let data = userDefaults.data(forKey: "habits") else {
             return
@@ -215,3 +226,4 @@ private extension Date {
         return dates
     }
 }
+
